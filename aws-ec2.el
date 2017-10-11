@@ -4,6 +4,7 @@
 
 ;; Author: Yuki Inoue <inouetakahiroki _at_ gmail.com>
 ;; URL: https://github.com/Yuki-Inoue/aws.el
+;; Package-Version: 20161007.1214
 ;; Version: 0.0.3
 ;; Package-Requires: ((emacs "24.4") (dash "2.12.1") (tblui "0.1.0"))
 
@@ -37,6 +38,8 @@
   "The command for \\[aws-instances] and other aws-ec2 commands."
   :type 'string
   :group 'aws-ec2)
+
+(setq aws-command "/usr/local/Cellar/awscli/1.11.160/bin/aws")
 
 (defun aws--shell-command-to-string (&rest args)
   (with-temp-buffer
@@ -95,11 +98,9 @@
                            (assoc-default 'InstanceType instance)
                            (or (assoc-default "Name" (assoc-default 'Tags instance)) "")
                            (assoc-default 'Name (assoc-default 'State instance))
+                           (or (assoc-default "environment" (assoc-default 'Tags instance)) "")
                            (prin1-to-string (assoc-default 'PrivateIpAddress instance) t)
-                           (or  "..." (prin1-to-string instance))
-                           ))))
-   )
-  )
+                           (or "..." (prin1-to-string instance))))))))
 
 (defun aws-instances-reboot-instances (ids)
   (apply #'aws--shell-command-to-string "ec2" "reboot-instances" "--instance-ids" ids))
@@ -174,9 +175,9 @@ Host %s
     (-each aws-instances
       (lambda (aws-instance)
         (let* ((host-name (->>
-                          aws-instance
-                          (assoc-default 'Tags)
-                          (assoc-default "Name")))
+                           aws-instance
+                           (assoc-default 'Tags)
+                           (assoc-default "Name")))
                (host-ip (assoc-default 'PrivateIpAddress aws-instance))
                (key-name (assoc-default 'KeyName aws-instance))
                (key-path (assoc-default key-name aws-ec2-key-alist))
@@ -192,6 +193,23 @@ Host %s
           (write-region snippet nil "~/.ssh/config" 'append)
           )))))
 
+(defun aws-instances-ssh-into-instance (ids)
+  "SSH into aws instance with IDS."
+  (if (/= 1 (length ids))
+      (error "Multiple instances cannot be selected."))
+  (let* ((id (nth 0 ids))
+         (aws-ec2-username "centos")
+         (instance-meta-json)
+         (instance-public-ip)
+         (instance-default-directory)
+         (instance-metadata (json-read-from-string (aws--shell-command-to-string "ec2" "describe-instances" "--instance-ids" id))))
+    (setq instance-meta-json (elt (cdr (car instance-metadata)) 0))
+    (setq instance-public-ip (assoc-default 'PublicDnsName (elt (cdr (car instance-meta-json)) 0)))
+    (setq instance-default-directory (concat "/ssh:" aws-ec2-username "@" instance-public-ip ":/home/" aws-ec2-username))
+    (let ((default-directory instance-default-directory))
+      (shell))))
+
+
 (tblui-define
  aws-instances
  aws-instances-get-tabulated-list-entries
@@ -199,27 +217,28 @@ Host %s
   ("InstType" 10 nil)
   ("Name" 30 nil)
   ("Status" 10 nil)
+  ("Environment" 15 nil)
   ("IP" 15 nil)
   ("Settings" 20 nil)]
  ((:key "I"
-   :name aws-instances-inspect-popup
-   :funcs ((?I "Inspect" aws-instances-inspect-instances)))
+        :name aws-instances-inspect-popup
+        :funcs ((?I "Inspect" aws-instances-inspect-instances)))
 
   (:key "S"
-   :name aws-instances-state-popup
-   :funcs ((?O "Stop" aws-instances-stop-instances)
-           (?R "Reboot" aws-instances-reboot-instances)
-           (?T "Terminate" aws-instances-terminate-instances)
-           (?S "Start" aws-instances-start-instances)))
+        :name aws-instances-state-popup
+        :funcs ((?O "Stop" aws-instances-stop-instances)
+                (?R "Reboot" aws-instances-reboot-instances)
+                (?T "Terminate" aws-instances-terminate-instances)
+                (?S "Start" aws-instances-start-instances)))
 
   (:key "A"
-   :name aws-instances-action-popup
-   :funcs ((?R "Rename Instance" aws-instances-rename-instance)))
+        :name aws-instances-action-popup
+        :funcs ((?R "Rename Instance" aws-instances-rename-instance)
+                (?C "SSH Into Instance" aws-instances-ssh-into-instance)))
 
   (:key "C"
-   :name aws-instances-configure-popup
-   :funcs ((?C "Append ssh configs to ~/.ssh/config" aws-instances-configure-ssh-config)))
-  ))
+        :name aws-instances-configure-popup
+        :funcs ((?C "Append ssh configs to ~/.ssh/config" aws-instances-configure-ssh-config)))))
 
 (defvar aws-current-profile nil
   "The currently used aws profile")
