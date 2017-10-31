@@ -39,7 +39,7 @@
   :type 'string
   :group 'aws-ec2)
 
-(setq aws-command "/usr/local/Cellar/awscli/1.11.160/bin/aws")
+(setq aws-command "/usr/local/Cellar/awscli/1.11.170/bin/aws")
 
 (defun aws--shell-command-to-string (&rest args)
   (with-temp-buffer
@@ -89,18 +89,20 @@
                           (cdr entry))))))))
 
 (defun aws-instances-get-tabulated-list-entries ()
-  (->>
-   (aws-ec2-normalize-raw-instances
-    (aws-ec2-all-raw-instances))
-   (mapcar (lambda (instance)
-             (list (assoc-default 'InstanceId instance)
-                   (vector (assoc-default 'InstanceId instance)
-                           (assoc-default 'InstanceType instance)
-                           (or (assoc-default "Name" (assoc-default 'Tags instance)) "")
-                           (assoc-default 'Name (assoc-default 'State instance))
-                           (or (assoc-default "environment" (assoc-default 'Tags instance)) "")
-                           (prin1-to-string (assoc-default 'PrivateIpAddress instance) t)
-                           (or "..." (prin1-to-string instance))))))))
+  (setq x (->>
+           (aws-ec2-normalize-raw-instances
+            (aws-ec2-all-raw-instances))
+           (mapcar (lambda (instance)
+                     (list (assoc-default 'InstanceId instance)
+                           (vector (assoc-default 'InstanceId instance)
+                                   (assoc-default 'InstanceType instance)
+                                   (or (assoc-default "Name" (assoc-default 'Tags instance)) "")
+                                   (assoc-default 'Name (assoc-default 'State instance))
+                                   (or (assoc-default "environment" (assoc-default 'Tags instance)) "")
+                                   (prin1-to-string (assoc-default 'PrivateIpAddress instance) t)
+                                   (or "..." (prin1-to-string instance))))))))
+  (message "tabulated list entries: %s" x)
+  x)
 
 (defun aws-instances-reboot-instances (ids)
   (apply #'aws--shell-command-to-string "ec2" "reboot-instances" "--instance-ids" ids))
@@ -193,21 +195,46 @@ Host %s
           (write-region snippet nil "~/.ssh/config" 'append)
           )))))
 
-(defun aws-instances-ssh-into-instance (ids)
-  "SSH into aws instance with IDS."
-  (if (/= 1 (length ids))
-      (error "Multiple instances cannot be selected."))
-  (let* ((id (nth 0 ids))
-         (aws-ec2-username "centos")
+(defun aws-instances-parse-default-directory (id)
+  "Parse the default directory from an ec2-instance"
+  (let* ((aws-ec2-username "centos")
          (instance-meta-json)
          (instance-public-ip)
          (instance-default-directory)
          (instance-metadata (json-read-from-string (aws--shell-command-to-string "ec2" "describe-instances" "--instance-ids" id))))
     (setq instance-meta-json (elt (cdr (car instance-metadata)) 0))
     (setq instance-public-ip (assoc-default 'PublicDnsName (elt (cdr (car instance-meta-json)) 0)))
-    (setq instance-default-directory (concat "/ssh:" aws-ec2-username "@" instance-public-ip ":/home/" aws-ec2-username))
+    (setq instance-default-directory (concat "/ssh:" aws-ec2-username "@" instance-public-ip ":/home/" aws-ec2-username))))
+
+(defun aws-instances-ssh-into-instance (ids)
+  "SSH into aws instance with IDS."
+  (if (/= 1 (length ids))
+      (error "Multiple instances cannot be selected."))
+  (let* ((id (nth 0 ids))
+         )
+    (setq instance-default-directory (aws-instances-parse-default-directory id))
     (let ((default-directory instance-default-directory))
-      (shell))))
+      (better-shell-for-current-dir))))
+
+(defun aws-instances-run-shell-command-on-instance (ids)
+  "SSH into aws instance with IDS."
+  (if (/= 1 (length ids))
+      (error "Multiple instances cannot be selected."))
+  (let* ((id (nth 0 ids))
+         )
+    (setq instance-default-directory (aws-instances-parse-default-directory id))
+    (let ((default-directory instance-default-directory))
+      (shell-command (read-string "Shell command: ")))))
+
+(defun aws-instances-run-emacs-command-on-instance (ids)
+  "SSH into aws instance with IDS."
+  (if (/= 1 (length ids))
+      (error "Multiple instances cannot be selected."))
+  (let* ((id (nth 0 ids)))
+    (setq instance-default-directory (aws-instances-parse-default-directory id))
+    (let ((default-directory instance-default-directory))
+      (counsel-M-x))))
+
 
 
 (tblui-define
@@ -234,7 +261,9 @@ Host %s
   (:key "A"
         :name aws-instances-action-popup
         :funcs ((?R "Rename Instance" aws-instances-rename-instance)
-                (?C "SSH Into Instance" aws-instances-ssh-into-instance)))
+                (?C "Run Shell Command on Instance" aws-instances-run-shell-command-on-instance)
+                (?S "SSH Into Instance" aws-instances-ssh-into-instance)
+                (?A "Run Emacs Command on Instance" aws-instances-run-emacs-command-on-instance)))
 
   (:key "C"
         :name aws-instances-configure-popup
