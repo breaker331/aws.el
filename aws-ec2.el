@@ -39,7 +39,7 @@
   :type 'string
   :group 'aws-ec2)
 
-(setq aws-command "/usr/local/Cellar/awscli/1.11.170/bin/aws")
+(setq aws-command "/usr/local/Cellar/awscli/1.11.190/bin/aws")
 
 (defun aws--shell-command-to-string (&rest args)
   (with-temp-buffer
@@ -203,7 +203,9 @@ Host %s
          (instance-default-directory)
          (instance-metadata (json-read-from-string (aws--shell-command-to-string "ec2" "describe-instances" "--instance-ids" id))))
     (setq instance-meta-json (elt (cdr (car instance-metadata)) 0))
-    (setq instance-public-ip (assoc-default 'PublicDnsName (elt (cdr (car instance-meta-json)) 0)))
+    (setq carimj (cdr instance-meta-json))
+    (setq cdrimj (car carimj))
+    (setq instance-public-ip (assoc-default 'PublicDnsName (elt (cdr (car (cdr instance-meta-json))) 0)))
     (setq instance-default-directory (concat "/ssh:" aws-ec2-username "@" instance-public-ip ":/home/" aws-ec2-username))))
 
 (defun aws-instances-ssh-into-instance (ids)
@@ -263,7 +265,7 @@ Host %s
         :funcs ((?R "Rename Instance" aws-instances-rename-instance)
                 (?C "Run Shell Command on Instance" aws-instances-run-shell-command-on-instance)
                 (?S "SSH Into Instance" aws-instances-ssh-into-instance)
-                (?A "Run Emacs Command on Instance" aws-instances-run-emacs-command-on-instance)))
+                (?E "Run Emacs Command on Instance" aws-instances-run-emacs-command-on-instance)))
 
   (:key "C"
         :name aws-instances-configure-popup
