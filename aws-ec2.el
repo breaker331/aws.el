@@ -39,7 +39,7 @@
   :type 'string
   :group 'aws-ec2)
 
-(setq aws-command "/usr/local/Cellar/awscli/1.11.190/bin/aws")
+(setq aws-command "/usr/local/Cellar/awscli/1.14.30/libexec/bin/aws")
 
 (defun aws--shell-command-to-string (&rest args)
   (with-temp-buffer
@@ -99,7 +99,7 @@
                                    (or (assoc-default "Name" (assoc-default 'Tags instance)) "")
                                    (assoc-default 'Name (assoc-default 'State instance))
                                    (or (assoc-default "environment" (assoc-default 'Tags instance)) "")
-                                   (prin1-to-string (assoc-default 'PrivateIpAddress instance) t)
+                                   (prin1-to-string (assoc-default 'PublicIpAddress instance) t)
                                    (or "..." (prin1-to-string instance))))))))
   (message "tabulated list entries: %s" x)
   x)
