@@ -196,24 +196,23 @@ Host %s
           )))))
 
 (defun aws-instances-parse-default-directory (id)
-  "Parse the default directory from an ec2-instance"
+  "Parse the default directory from an ec2-instance with id ID."
   (let* ((aws-ec2-username "centos")
          (instance-meta-json)
          (instance-public-ip)
          (instance-default-directory)
          (instance-metadata (json-read-from-string (aws--shell-command-to-string "ec2" "describe-instances" "--instance-ids" id))))
     (setq instance-meta-json (elt (cdr (car instance-metadata)) 0))
-    (setq carimj (cdr instance-meta-json))
-    (setq cdrimj (car carimj))
-    (setq instance-public-ip (assoc-default 'PublicDnsName (elt (cdr (car (cdr instance-meta-json))) 0)))
+    (setq instances-vec (assoc-default 'Instances instance-meta-json))
+    (setq instance-props-alist (elt instances-vec 0))
+    (setq instance-public-ip (assoc-default 'PublicDnsName instance-props-alist))
     (setq instance-default-directory (concat "/ssh:" aws-ec2-username "@" instance-public-ip ":/home/" aws-ec2-username))))
 
 (defun aws-instances-ssh-into-instance (ids)
   "SSH into aws instance with IDS."
   (if (/= 1 (length ids))
       (error "Multiple instances cannot be selected."))
-  (let* ((id (nth 0 ids))
-         )
+  (let* ((id (nth 0 ids)))
     (setq instance-default-directory (aws-instances-parse-default-directory id))
     (let ((default-directory instance-default-directory))
       (better-shell-for-current-dir))))
