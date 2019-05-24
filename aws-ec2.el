@@ -89,20 +89,19 @@
                           (cdr entry))))))))
 
 (defun aws-instances-get-tabulated-list-entries ()
-  (setq x (->>
-           (aws-ec2-normalize-raw-instances
-            (aws-ec2-all-raw-instances))
-           (mapcar (lambda (instance)
-                     (list (assoc-default 'InstanceId instance)
-                           (vector (assoc-default 'InstanceId instance)
-                                   (assoc-default 'InstanceType instance)
-                                   (or (assoc-default "Name" (assoc-default 'Tags instance)) "")
-                                   (assoc-default 'Name (assoc-default 'State instance))
-                                   (or (assoc-default "environment" (assoc-default 'Tags instance)) "")
-                                   (prin1-to-string (assoc-default 'PublicIpAddress instance) t)
-                                   (or "..." (prin1-to-string instance))))))))
-  (message "tabulated list entries: %s" x)
-  x)
+  "Build list of aws ec2 instances."
+  (->>
+   (aws-ec2-normalize-raw-instances
+    (aws-ec2-all-raw-instances))
+   (mapcar (lambda (instance)
+             (list (assoc-default 'InstanceId instance)
+                   (vector (assoc-default 'InstanceId instance)
+                           (assoc-default 'InstanceType instance)
+                           (or (assoc-default "Name" (assoc-default 'Tags instance)) "")
+                           (assoc-default 'Name (assoc-default 'State instance))
+                           (or (assoc-default "environment" (assoc-default 'Tags instance)) "")
+                           (prin1-to-string (assoc-default 'PublicIpAddress instance) t)
+                           (or "..." (prin1-to-string instance))))))))
 
 (defun aws-instances-reboot-instances (ids)
   (apply #'aws--shell-command-to-string "ec2" "reboot-instances" "--instance-ids" ids))
@@ -236,6 +235,35 @@ Host %s
     (let ((default-directory instance-default-directory))
       (counsel-M-x))))
 
+(defun aws-instances-run-sql-connect-on-instance (ids)
+  "SSH into aws instance with IDS."
+  (if (/= 1 (length ids))
+      (error "Multiple instances cannot be selected."))
+  (let* ((id (nth 0 ids)))
+    (setq instance-default-directory (aws-instances-parse-default-directory id))
+    (let ((default-directory instance-default-directory))
+      (call-interactively #'ailbe-sql-connect))))
+
+(defun aws-instances-vterm-ssh-into-instance (ids)
+  "SSH into instance with IDS using vterm."
+  (message "processing ids: %s" ids)
+  (if (/= 1 (length ids))
+      (error "Multiple instances cannot be selected"))
+  (let* (
+         (id (nth 0 ids))
+         (entries (aws-instances-get-tabulated-list-entries))
+         (instance-alist-entry (assoc id entries))
+         (instance-properties-vector (cadr instance-alist-entry))
+         (ip (elt instance-properties-vector 5)))
+    (message "parsed entries: %s" entries)
+    (message "instance alist entry: %s" instance-alist-entry)
+    (message "instance properties: %s" instance-properties-vector)
+    (message "ip: %s" ip)
+    (setq buffer-name (get-buffer-create (format "vterm-ec2-%s" id)))
+    (with-current-buffer buffer-name
+      (rename-uniquely)
+      (vterm-mode)
+      (vterm-send-string (format "ssh %s@%s\n" "centos" ip)))))
 
 
 (tblui-define
@@ -264,7 +292,9 @@ Host %s
         :funcs ((?R "Rename Instance" aws-instances-rename-instance)
                 (?C "Run Shell Command on Instance" aws-instances-run-shell-command-on-instance)
                 (?S "SSH Into Instance" aws-instances-ssh-into-instance)
-                (?E "Run Emacs Command on Instance" aws-instances-run-emacs-command-on-instance)))
+                (?E "Run Emacs Command on Instance" aws-instances-run-emacs-command-on-instance)
+                (?D "Run SQL on Instance" aws-instances-run-sql-connect-on-instance)
+                (?V "SSH Into Instance with Vterm" aws-instances-vterm-ssh-into-instance)))
 
   (:key "C"
         :name aws-instances-configure-popup
