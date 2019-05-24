@@ -250,21 +250,25 @@ Host %s
   (if (/= 1 (length ids))
       (error "Multiple instances cannot be selected"))
   (let* (
+         (buffer-name)
          (id (nth 0 ids))
-         (entries (aws-instances-get-tabulated-list-entries))
-         (instance-alist-entry (assoc id entries))
-         (instance-properties-vector (cadr instance-alist-entry))
+         (instance-properties-vector (aws-instances-get-instance-metadata-by-id id))
          (ip (elt instance-properties-vector 5)))
-    (message "parsed entries: %s" entries)
-    (message "instance alist entry: %s" instance-alist-entry)
-    (message "instance properties: %s" instance-properties-vector)
-    (message "ip: %s" ip)
     (setq buffer-name (get-buffer-create (format "vterm-ec2-%s" id)))
     (with-current-buffer buffer-name
       (rename-uniquely)
       (vterm-mode)
       (vterm-send-string (format "ssh %s@%s\n" "centos" ip)))))
 
+;; TODO: Maybe I should create a struct or something to represent the metadata
+
+(defun aws-instances-get-instance-metadata-by-id (id)
+  "Get metadata for instance with id ID."
+  (let*
+      (
+       (instances (aws-instances-get-tabulated-list-entries))
+       (instance-id-metadata-cons (assoc id instances)))
+    (cadr instance-id-metadata-cons)))
 
 (tblui-define
  aws-instances
